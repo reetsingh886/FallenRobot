@@ -27,3 +27,4 @@ tgcrypto==1.2.5
 wikipedia==1.4.0
 psycopg2-binary==2.9.9
 bing-image-downloader==1.1.2
+opencv-python-headless==4.9.0.80
