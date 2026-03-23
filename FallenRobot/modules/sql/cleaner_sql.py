@@ -11,11 +11,8 @@ class CleanerBlueTextChatSettings(BASE):
     is_enable = Column(Boolean, default=False)
 
     def __init__(self, chat_id, is_enable):
-        self.chat_id = chat_id
+        self.chat_id = str(chat_id)
         self.is_enable = is_enable
-
-    def __repr__(self):
-        return "clean blue text for {}".format(self.chat_id)
 
 
 class CleanerBlueTextChat(BASE):
@@ -24,7 +21,7 @@ class CleanerBlueTextChat(BASE):
     command = Column(UnicodeText, primary_key=True)
 
     def __init__(self, chat_id, command):
-        self.chat_id = chat_id
+        self.chat_id = str(chat_id)
         self.command = command
 
 
@@ -36,9 +33,16 @@ class CleanerBlueTextGlobal(BASE):
         self.command = command
 
 
-CleanerBlueTextChatSettings.__table__.create(checkfirst=True)
-CleanerBlueTextChat.__table__.create(checkfirst=True)
-CleanerBlueTextGlobal.__table__.create(checkfirst=True)
+# ✅ SAFE TABLE CREATE
+try:
+    if SESSION:
+        bind = SESSION.get_bind()
+        CleanerBlueTextChatSettings.__table__.create(bind=bind, checkfirst=True)
+        CleanerBlueTextChat.__table__.create(bind=bind, checkfirst=True)
+        CleanerBlueTextGlobal.__table__.create(bind=bind, checkfirst=True)
+except:
+    pass
+
 
 CLEANER_CHAT_SETTINGS = threading.RLock()
 CLEANER_CHAT_LOCK = threading.RLock()
@@ -49,6 +53,9 @@ GLOBAL_IGNORE_COMMANDS = set()
 
 
 def set_cleanbt(chat_id, is_enable):
+    if not SESSION:
+        return
+
     with CLEANER_CHAT_SETTINGS:
         curr = SESSION.query(CleanerBlueTextChatSettings).get(str(chat_id))
         if curr:
@@ -61,16 +68,18 @@ def set_cleanbt(chat_id, is_enable):
 
 
 def chat_ignore_command(chat_id, ignore):
+    if not SESSION:
+        return False
+
     ignore = ignore.lower()
     with CLEANER_CHAT_LOCK:
         ignored = SESSION.query(CleanerBlueTextChat).get((str(chat_id), ignore))
 
         if not ignored:
-            if str(chat_id) not in CLEANER_CHATS:
-                CLEANER_CHATS.setdefault(
-                    str(chat_id),
-                    {"setting": False, "commands": set()},
-                )
+            CLEANER_CHATS.setdefault(
+                str(chat_id),
+                {"setting": False, "commands": set()},
+            )
 
             CLEANER_CHATS[str(chat_id)]["commands"].add(ignore)
 
@@ -78,23 +87,26 @@ def chat_ignore_command(chat_id, ignore):
             SESSION.add(ignored)
             SESSION.commit()
             return True
+
         SESSION.close()
         return False
 
 
 def chat_unignore_command(chat_id, unignore):
+    if not SESSION:
+        return False
+
     unignore = unignore.lower()
     with CLEANER_CHAT_LOCK:
         unignored = SESSION.query(CleanerBlueTextChat).get((str(chat_id), unignore))
 
         if unignored:
-            if str(chat_id) not in CLEANER_CHATS:
-                CLEANER_CHATS.setdefault(
-                    str(chat_id),
-                    {"setting": False, "commands": set()},
-                )
-            if unignore in CLEANER_CHATS.get(str(chat_id)).get("commands"):
-                CLEANER_CHATS[str(chat_id)]["commands"].remove(unignore)
+            CLEANER_CHATS.setdefault(
+                str(chat_id),
+                {"setting": False, "commands": set()},
+            )
+
+            CLEANER_CHATS[str(chat_id)]["commands"].discard(unignore)
 
             SESSION.delete(unignored)
             SESSION.commit()
@@ -105,6 +117,9 @@ def chat_unignore_command(chat_id, unignore):
 
 
 def global_ignore_command(command):
+    if not SESSION:
+        return False
+
     command = command.lower()
     with CLEANER_GLOBAL_LOCK:
         ignored = SESSION.query(CleanerBlueTextGlobal).get(str(command))
@@ -122,15 +137,17 @@ def global_ignore_command(command):
 
 
 def global_unignore_command(command):
+    if not SESSION:
+        return False
+
     command = command.lower()
     with CLEANER_GLOBAL_LOCK:
         unignored = SESSION.query(CleanerBlueTextGlobal).get(str(command))
 
         if unignored:
-            if command in GLOBAL_IGNORE_COMMANDS:
-                GLOBAL_IGNORE_COMMANDS.remove(command)
+            GLOBAL_IGNORE_COMMANDS.discard(command)
 
-            SESSION.delete(command)
+            SESSION.delete(unignored)  # ✅ FIXED
             SESSION.commit()
             return True
 
@@ -143,28 +160,27 @@ def is_command_ignored(chat_id, command):
         return True
 
     if str(chat_id) in CLEANER_CHATS:
-        if command.lower() in CLEANER_CHATS.get(str(chat_id)).get("commands"):
+        if command.lower() in CLEANER_CHATS[str(chat_id)]["commands"]:
             return True
 
     return False
 
 
 def is_enabled(chat_id):
+    if not SESSION:
+        return False
+
     try:
         resultcurr = SESSION.query(CleanerBlueTextChatSettings).get(str(chat_id))
         if resultcurr:
             return resultcurr.is_enable
-        return False  # default
+        return False
     finally:
         SESSION.close()
 
 
 def get_all_ignored(chat_id):
-    if str(chat_id) in CLEANER_CHATS:
-        LOCAL_IGNORE_COMMANDS = CLEANER_CHATS.get(str(chat_id)).get("commands")
-    else:
-        LOCAL_IGNORE_COMMANDS = set()
-
+    LOCAL_IGNORE_COMMANDS = CLEANER_CHATS.get(str(chat_id), {}).get("commands", set())
     return GLOBAL_IGNORE_COMMANDS, LOCAL_IGNORE_COMMANDS
 
 
@@ -172,10 +188,17 @@ def __load_cleaner_list():
     global GLOBAL_IGNORE_COMMANDS
     global CLEANER_CHATS
 
+    if not SESSION:
+        GLOBAL_IGNORE_COMMANDS = set()
+        CLEANER_CHATS = {}
+        return
+
     try:
         GLOBAL_IGNORE_COMMANDS = {
-            (x.command) for x in SESSION.query(CleanerBlueTextGlobal).all()
+            x.command for x in SESSION.query(CleanerBlueTextGlobal).all()
         }
+    except:
+        GLOBAL_IGNORE_COMMANDS = set()
     finally:
         SESSION.close()
 
@@ -183,6 +206,8 @@ def __load_cleaner_list():
         for x in SESSION.query(CleanerBlueTextChatSettings).all():
             CLEANER_CHATS.setdefault(x.chat_id, {"setting": False, "commands": set()})
             CLEANER_CHATS[x.chat_id]["setting"] = x.is_enable
+    except:
+        pass
     finally:
         SESSION.close()
 
@@ -190,6 +215,8 @@ def __load_cleaner_list():
         for x in SESSION.query(CleanerBlueTextChat).all():
             CLEANER_CHATS.setdefault(x.chat_id, {"setting": False, "commands": set()})
             CLEANER_CHATS[x.chat_id]["commands"].add(x.command)
+    except:
+        pass
     finally:
         SESSION.close()
 
