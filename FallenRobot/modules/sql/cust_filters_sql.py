@@ -1,8 +1,20 @@
 import threading
+from enum import Enum
 
 from sqlalchemy import BigInteger, Boolean, Column, String, UnicodeText
 
 from FallenRobot.modules.sql import BASE, SESSION
+
+
+# ✅ TYPES FIX (IMPORTANT)
+class Types(Enum):
+    TEXT = 1
+    STICKER = 2
+    DOCUMENT = 3
+    PHOTO = 4
+    AUDIO = 5
+    VOICE = 6
+    VIDEO = 7
 
 
 class CustomFilters(BASE):
@@ -38,20 +50,24 @@ class Buttons(BASE):
     same_line = Column(Boolean, default=False)
 
 
-# CREATE TABLES
+# ✅ SAFE TABLE CREATE (NO EMOJI)
 try:
     if SESSION:
         bind = SESSION.get_bind()
         CustomFilters.__table__.create(bind=bind, checkfirst=True)
         Buttons.__table__.create(bind=bind, checkfirst=True)
-except Exception:
+except:
     pass
 
 
 CUST_FILT_LOCK = threading.RLock()
 BUTTON_LOCK = threading.RLock()
-
 CHAT_FILTERS = {}
+
+
+# ✅ REQUIRED FUNCTION (FIX ERROR)
+def get_chat_triggers(chat_id):
+    return CHAT_FILTERS.get(str(chat_id), [])
 
 
 def add_filter(chat_id, keyword, reply, buttons=None):
@@ -76,6 +92,7 @@ def add_filter(chat_id, keyword, reply, buttons=None):
         SESSION.add(filt)
         SESSION.commit()
 
+        # update cache
         CHAT_FILTERS.setdefault(str(chat_id), []).append(keyword)
 
     for b_name, url, same_line in buttons:
@@ -92,11 +109,11 @@ def remove_filter(chat_id, keyword):
             SESSION.delete(filt)
             SESSION.commit()
 
-            if str(chat_id) in CHAT_FILTERS:
-                if keyword in CHAT_FILTERS[str(chat_id)]:
-                    CHAT_FILTERS[str(chat_id)].remove(keyword)
+            if keyword in CHAT_FILTERS.get(str(chat_id), []):
+                CHAT_FILTERS[str(chat_id)].remove(keyword)
 
             return True
+
         return False
 
 
@@ -131,10 +148,7 @@ def get_buttons(chat_id, keyword):
     try:
         return (
             SESSION.query(Buttons)
-            .filter(
-                Buttons.chat_id == str(chat_id),
-                Buttons.keyword == keyword
-            )
+            .filter(Buttons.chat_id == str(chat_id), Buttons.keyword == keyword)
             .all()
         )
     finally:
@@ -159,7 +173,7 @@ def __load_chat_filters():
         for x in all_filters:
             CHAT_FILTERS[x.chat_id].append(x.keyword)
 
-    except Exception:
+    except:
         CHAT_FILTERS = {}
 
     finally:
@@ -167,7 +181,3 @@ def __load_chat_filters():
 
 
 __load_chat_filters()
-
-
-def get_chat_triggers(chat_id):
-    return CHAT_FILTERS.get(str(chat_id), [])
