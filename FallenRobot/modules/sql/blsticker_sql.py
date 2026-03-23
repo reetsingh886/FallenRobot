@@ -11,18 +11,8 @@ class StickersFilters(BASE):
     trigger = Column(UnicodeText, primary_key=True, nullable=False)
 
     def __init__(self, chat_id, trigger):
-        self.chat_id = str(chat_id)  # ensure string
+        self.chat_id = str(chat_id)
         self.trigger = trigger
-
-    def __repr__(self):
-        return "<Stickers filter '%s' for %s>" % (self.trigger, self.chat_id)
-
-    def __eq__(self, other):
-        return bool(
-            isinstance(other, StickersFilters)
-            and self.chat_id == other.chat_id
-            and self.trigger == other.trigger
-        )
 
 
 class StickerSettings(BASE):
@@ -36,14 +26,16 @@ class StickerSettings(BASE):
         self.blacklist_type = blacklist_type
         self.value = value
 
-    def __repr__(self):
-        return "<{} will executing {} for blacklist trigger.>".format(
-            self.chat_id, self.blacklist_type
-        )
 
+# ✅ SAFE TABLE CREATE
+try:
+    if SESSION:
+        bind = SESSION.get_bind()
+        StickersFilters.__table__.create(bind=bind, checkfirst=True)
+        StickerSettings.__table__.create(bind=bind, checkfirst=True)
+except:
+    pass
 
-StickersFilters.__table__.create(checkfirst=True)
-StickerSettings.__table__.create(checkfirst=True)
 
 STICKERS_FILTER_INSERTION_LOCK = threading.RLock()
 STICKSET_FILTER_INSERTION_LOCK = threading.RLock()
@@ -53,25 +45,26 @@ CHAT_BLSTICK_BLACKLISTS = {}
 
 
 def add_to_stickers(chat_id, trigger):
+    if not SESSION:
+        return
+
     with STICKERS_FILTER_INSERTION_LOCK:
         stickers_filt = StickersFilters(str(chat_id), trigger)
 
-        SESSION.merge(stickers_filt)  # merge to avoid duplicate key issues
+        SESSION.merge(stickers_filt)
         SESSION.commit()
-        global CHAT_STICKERS
-        if CHAT_STICKERS.get(str(chat_id), set()) == set():
-            CHAT_STICKERS[str(chat_id)] = {trigger}
-        else:
-            CHAT_STICKERS.get(str(chat_id), set()).add(trigger)
+
+        CHAT_STICKERS.setdefault(str(chat_id), set()).add(trigger)
 
 
 def rm_from_stickers(chat_id, trigger):
+    if not SESSION:
+        return False
+
     with STICKERS_FILTER_INSERTION_LOCK:
         stickers_filt = SESSION.query(StickersFilters).get((str(chat_id), trigger))
         if stickers_filt:
-            if trigger in CHAT_STICKERS.get(str(chat_id), set()):  # sanity check
-                CHAT_STICKERS.get(str(chat_id), set()).remove(trigger)
-
+            CHAT_STICKERS.get(str(chat_id), set()).discard(trigger)
             SESSION.delete(stickers_filt)
             SESSION.commit()
             return True
@@ -85,42 +78,50 @@ def get_chat_stickers(chat_id):
 
 
 def num_stickers_filters():
+    if not SESSION:
+        return 0
+
     try:
         return SESSION.query(StickersFilters).count()
+    except:
+        return 0
     finally:
         SESSION.close()
 
 
 def num_stickers_chat_filters(chat_id):
+    if not SESSION:
+        return 0
+
     try:
         return (
             SESSION.query(StickersFilters.chat_id)
             .filter(StickersFilters.chat_id == str(chat_id))
             .count()
         )
+    except:
+        return 0
     finally:
         SESSION.close()
 
 
 def num_stickers_filter_chats():
+    if not SESSION:
+        return 0
+
     try:
         return SESSION.query(func.count(distinct(StickersFilters.chat_id))).scalar()
+    except:
+        return 0
     finally:
         SESSION.close()
 
 
 def set_blacklist_strength(chat_id, blacklist_type, value):
-    # for blacklist_type
-    # 0 = nothing
-    # 1 = delete
-    # 2 = warn
-    # 3 = mute
-    # 4 = kick
-    # 5 = ban
-    # 6 = tban
-    # 7 = tmute
+    if not SESSION:
+        return
+
     with STICKSET_FILTER_INSERTION_LOCK:
-        global CHAT_BLSTICK_BLACKLISTS
         curr_setting = SESSION.query(StickerSettings).get(str(chat_id))
         if not curr_setting:
             curr_setting = StickerSettings(
@@ -129,6 +130,7 @@ def set_blacklist_strength(chat_id, blacklist_type, value):
 
         curr_setting.blacklist_type = int(blacklist_type)
         curr_setting.value = str(value)
+
         CHAT_BLSTICK_BLACKLISTS[str(chat_id)] = {
             "blacklist_type": int(blacklist_type),
             "value": value,
@@ -139,29 +141,32 @@ def set_blacklist_strength(chat_id, blacklist_type, value):
 
 
 def get_blacklist_setting(chat_id):
-    try:
-        setting = CHAT_BLSTICK_BLACKLISTS.get(str(chat_id))
-        if setting:
-            return setting["blacklist_type"], setting["value"]
-        else:
-            return 1, "0"
-
-    finally:
-        SESSION.close()
+    setting = CHAT_BLSTICK_BLACKLISTS.get(str(chat_id))
+    if setting:
+        return setting["blacklist_type"], setting["value"]
+    return 1, "0"
 
 
 def __load_CHAT_STICKERS():
     global CHAT_STICKERS
+
+    if not SESSION:
+        CHAT_STICKERS = {}
+        return
+
     try:
         chats = SESSION.query(StickersFilters.chat_id).distinct().all()
-        for (chat_id,) in chats:  # remove tuple by ( ,)
+        for (chat_id,) in chats:
             CHAT_STICKERS[chat_id] = []
 
         all_filters = SESSION.query(StickersFilters).all()
         for x in all_filters:
-            CHAT_STICKERS[x.chat_id] += [x.trigger]
+            CHAT_STICKERS[x.chat_id].append(x.trigger)
 
         CHAT_STICKERS = {x: set(y) for x, y in CHAT_STICKERS.items()}
+
+    except:
+        CHAT_STICKERS = {}
 
     finally:
         SESSION.close()
@@ -169,19 +174,30 @@ def __load_CHAT_STICKERS():
 
 def __load_chat_stickerset_blacklists():
     global CHAT_BLSTICK_BLACKLISTS
+
+    if not SESSION:
+        CHAT_BLSTICK_BLACKLISTS = {}
+        return
+
     try:
         chats_settings = SESSION.query(StickerSettings).all()
-        for x in chats_settings:  # remove tuple by ( ,)
+        for x in chats_settings:
             CHAT_BLSTICK_BLACKLISTS[x.chat_id] = {
                 "blacklist_type": x.blacklist_type,
                 "value": x.value,
             }
+
+    except:
+        CHAT_BLSTICK_BLACKLISTS = {}
 
     finally:
         SESSION.close()
 
 
 def migrate_chat(old_chat_id, new_chat_id):
+    if not SESSION:
+        return
+
     with STICKERS_FILTER_INSERTION_LOCK:
         chat_filters = (
             SESSION.query(StickersFilters)
@@ -190,6 +206,7 @@ def migrate_chat(old_chat_id, new_chat_id):
         )
         for filt in chat_filters:
             filt.chat_id = str(new_chat_id)
+
         SESSION.commit()
 
 
