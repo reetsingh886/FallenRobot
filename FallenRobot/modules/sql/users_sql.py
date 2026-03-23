@@ -21,9 +21,6 @@ def __init__(self, user_id, username=None):
     self.user_id = user_id
     self.username = username
 
-def __repr__(self):
-    return "<User {} ({})>".format(self.username, self.user_id)
-
 class Chats(BASE):
 tablename = "chats"
 chat_id = Column(String(14), primary_key=True)
@@ -32,9 +29,6 @@ chat_name = Column(UnicodeText, nullable=False)
 def __init__(self, chat_id, chat_name):
     self.chat_id = str(chat_id)
     self.chat_name = chat_name
-
-def __repr__(self):
-    return "<Chat {} ({})>".format(self.chat_name, self.chat_id)
 
 class ChatMembers(BASE):
 tablename = "chat_members"
@@ -121,7 +115,7 @@ with INSERTION_LOCK:
 
 =========================
 
-✅ REQUIRED FUNCTIONS
+REQUIRED FUNCTIONS
 
 =========================
 
