@@ -7,7 +7,7 @@ cachetools==4.2.2
 countryinfo==0.1.2
 emoji==2.10.1
 emoji-country-flag==2.0.1
-gpytranslate==1.5.5
+gpytranslate==1.5.1
 hachoir==3.2.0
 lxml==4.9.3
 markdown2==2.4.13
