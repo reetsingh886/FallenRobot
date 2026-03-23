@@ -21,9 +21,15 @@ class AFK(BASE):
         return "afk_status for {}".format(self.user_id)
 
 
-AFK.__table__.create(checkfirst=True)
-INSERTION_LOCK = threading.RLock()
+# ✅ SAFE TABLE CREATE
+try:
+    if SESSION:
+        AFK.__table__.create(bind=SESSION.get_bind(), checkfirst=True)
+except:
+    pass
 
+
+INSERTION_LOCK = threading.RLock()
 AFK_USERS = {}
 
 
@@ -32,13 +38,21 @@ def is_afk(user_id):
 
 
 def check_afk_status(user_id):
+    if not SESSION:
+        return None
+
     try:
         return SESSION.query(AFK).get(user_id)
+    except:
+        return None
     finally:
         SESSION.close()
 
 
 def set_afk(user_id, reason=""):
+    if not SESSION:
+        return
+
     with INSERTION_LOCK:
         curr = SESSION.query(AFK).get(user_id)
         if not curr:
@@ -53,10 +67,13 @@ def set_afk(user_id, reason=""):
 
 
 def rm_afk(user_id):
+    if not SESSION:
+        return False
+
     with INSERTION_LOCK:
         curr = SESSION.query(AFK).get(user_id)
         if curr:
-            if user_id in AFK_USERS:  # sanity check
+            if user_id in AFK_USERS:
                 del AFK_USERS[user_id]
 
             SESSION.delete(curr)
@@ -68,23 +85,34 @@ def rm_afk(user_id):
 
 
 def toggle_afk(user_id, reason=""):
+    if not SESSION:
+        return
+
     with INSERTION_LOCK:
         curr = SESSION.query(AFK).get(user_id)
         if not curr:
             curr = AFK(user_id, reason, True)
         elif curr.is_afk:
             curr.is_afk = False
-        elif not curr.is_afk:
+        else:
             curr.is_afk = True
+
         SESSION.add(curr)
         SESSION.commit()
 
 
 def __load_afk_users():
     global AFK_USERS
+
+    if not SESSION:
+        AFK_USERS = {}
+        return
+
     try:
         all_afk = SESSION.query(AFK).all()
         AFK_USERS = {user.user_id: user.reason for user in all_afk if user.is_afk}
+    except:
+        AFK_USERS = {}
     finally:
         SESSION.close()
 
