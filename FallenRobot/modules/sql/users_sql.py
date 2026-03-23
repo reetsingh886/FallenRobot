@@ -59,7 +59,7 @@ class ChatMembers(BASE):
         self.user = user
 
 
-# SAFE TABLE CREATE (NO EMOJI)
+# SAFE TABLE CREATE
 try:
     if SESSION:
         bind = SESSION.get_bind()
@@ -126,9 +126,27 @@ def update_user(user_id, username, chat_id=None, chat_name=None):
         SESSION.commit()
 
 
-# IMPORTANT FUNCTION (ERROR FIX)
+# GET ALL USERS
 def get_all_users():
+    if not SESSION:
+        return []
     try:
         return SESSION.query(Users).all()
+    except:
+        return []
+
+
+# GET USER COMMON CHATS (FIX FOR ERROR)
+def get_user_com_chats(user_id):
+    if not SESSION:
+        return []
+
+    try:
+        chats = (
+            SESSION.query(ChatMembers.chat)
+            .filter(ChatMembers.user == user_id)
+            .all()
+        )
+        return [chat[0] for chat in chats]
     except:
         return []
