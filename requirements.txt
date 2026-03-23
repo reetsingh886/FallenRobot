@@ -1,4 +1,4 @@
-aiofiles==24.1.0
+aiofiles==23.2.1
 apscheduler==3.10.4
 beautifulsoup4==4.12.3
 bleach==6.1.0
@@ -7,7 +7,7 @@ cachetools==5.3.3
 countryinfo==0.1.2
 emoji==2.10.1
 emoji-country-flag==2.0.1
-gpytranslate==2.0.0
+gpytranslate==1.5.5
 hachoir==3.2.0
 lxml==4.9.3
 markdown2==2.4.13
@@ -16,6 +16,7 @@ pillow==10.3.0
 pretty_errors==1.2.25
 pyrate-limiter==3.0.0
 pyrogram==2.0.106
+python-telegram-bot==13.15
 regex==2023.12.25
 requests==2.31.0
 speedtest-cli==2.1.3
