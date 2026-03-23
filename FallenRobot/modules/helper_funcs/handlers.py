@@ -21,7 +21,7 @@ class AntiSpam:
             + (TIGERS or [])
         )
 
-        # Simple limiter (fixed for compatibility)
+        # Simple limiter (compatible)
         self.limiter = Limiter(Duration.SECOND)
 
     def check_user(self, user):
