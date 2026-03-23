@@ -37,7 +37,7 @@ nullable=False,
 )
 table_args = (UniqueConstraint("chat", "user", name="_chat_members_uc"),)
 
-SAFE TABLE CREATE
+CREATE TABLES
 
 try:
 if SESSION:
