@@ -15,13 +15,22 @@ class BlacklistUsers(BASE):
         self.reason = reason
 
 
-BlacklistUsers.__table__.create(checkfirst=True)
+# SAFE TABLE CREATE
+try:
+    if SESSION:
+        BlacklistUsers.__table__.create(bind=SESSION.get_bind(), checkfirst=True)
+except:
+    pass
+
 
 BLACKLIST_LOCK = threading.RLock()
 BLACKLIST_USERS = set()
 
 
 def blacklist_user(user_id, reason=None):
+    if not SESSION:
+        return
+
     with BLACKLIST_LOCK:
         user = SESSION.query(BlacklistUsers).get(str(user_id))
         if not user:
@@ -35,6 +44,9 @@ def blacklist_user(user_id, reason=None):
 
 
 def unblacklist_user(user_id):
+    if not SESSION:
+        return
+
     with BLACKLIST_LOCK:
         user = SESSION.query(BlacklistUsers).get(str(user_id))
         if user:
@@ -45,6 +57,9 @@ def unblacklist_user(user_id):
 
 
 def get_reason(user_id):
+    if not SESSION:
+        return ""
+
     user = SESSION.query(BlacklistUsers).get(str(user_id))
     rep = ""
     if user:
@@ -60,8 +75,15 @@ def is_user_blacklisted(user_id):
 
 def __load_blacklist_userid_list():
     global BLACKLIST_USERS
+
+    if not SESSION:
+        BLACKLIST_USERS = set()
+        return
+
     try:
         BLACKLIST_USERS = {int(x.user_id) for x in SESSION.query(BlacklistUsers).all()}
+    except:
+        BLACKLIST_USERS = set()
     finally:
         SESSION.close()
 
