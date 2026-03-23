@@ -6,7 +6,7 @@ from sqlalchemy import BigInteger, Boolean, Column, String, UnicodeText
 from FallenRobot.modules.sql import BASE, SESSION
 
 
-# ✅ TYPES FIX (IMPORTANT)
+# FINAL TYPES FIX
 class Types(Enum):
     TEXT = 1
     STICKER = 2
@@ -15,6 +15,7 @@ class Types(Enum):
     AUDIO = 5
     VOICE = 6
     VIDEO = 7
+    BUTTON_TEXT = 8
 
 
 class CustomFilters(BASE):
@@ -50,7 +51,7 @@ class Buttons(BASE):
     same_line = Column(Boolean, default=False)
 
 
-# ✅ SAFE TABLE CREATE (NO EMOJI)
+# SAFE TABLE CREATE
 try:
     if SESSION:
         bind = SESSION.get_bind()
@@ -65,7 +66,7 @@ BUTTON_LOCK = threading.RLock()
 CHAT_FILTERS = {}
 
 
-# ✅ REQUIRED FUNCTION (FIX ERROR)
+# REQUIRED FUNCTION
 def get_chat_triggers(chat_id):
     return CHAT_FILTERS.get(str(chat_id), [])
 
@@ -92,7 +93,6 @@ def add_filter(chat_id, keyword, reply, buttons=None):
         SESSION.add(filt)
         SESSION.commit()
 
-        # update cache
         CHAT_FILTERS.setdefault(str(chat_id), []).append(keyword)
 
     for b_name, url, same_line in buttons:
